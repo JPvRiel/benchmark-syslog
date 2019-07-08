@@ -1,0 +1,40 @@
+FROM python:3.7-slim-stretch
+LABEL application="syslog_benchmark"
+ENV	DEBIAN_FRONTEND=noninteractive
+ENV APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=noninteractive
+
+# Generic extra packages
+RUN	apt-get -y update \
+	# && apt-get -y upgrade \
+	&& apt-get -y install gnupg2 bash-builtins procps time bc netcat-openbsd jq
+
+# Rsyslog packages
+ADD etc/apt/sources.list.d/addiscon_rsyslog.list etc/apt/sources.list.d
+RUN mkdir -p /opt/rsyslog
+ADD opt/rsyslog/Release.key /opt/rsyslog/
+# Trusting a developer's release key downloaded direclty from a server is weak security:
+# RUN curl https://download.opensuse.org/repositories/home:/rgerhards/Debian_9.0/Release.key | APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=noninteractive apt-key add - \
+RUN apt-key add /opt/rsyslog/Release.key \
+	&& apt-get -y update \
+	&& apt-get -y install libfastjson4 \
+	&& apt-get -y install rsyslog \
+	&& apt-get -y install rsyslog-imptcp \
+	&& rm -r /etc/rsyslog.conf
+
+# Python dependencies
+RUN mkdir -p /opt/benchmark/etc
+COPY /opt/benchmark/etc/requirements.txt /opt/benchmark/etc/
+RUN pip install -r /opt/benchmark/etc/requirements.txt
+
+# Rsyslog config
+RUN mkdir -p /opt/rsyslog/etc
+COPY opt/rsyslog/etc /opt/rsyslog/etc
+ENV RSYSLOG_CONF_DIR=/opt/rsyslog/etc
+
+# Scripts
+COPY opt/benchmark/bin /opt/benchmark/bin
+
+VOLUME /tmp/test
+WORKDIR /tmp/test
+
+CMD	["/opt/benchmark/bin/test_syslog_perf.sh"]
